@@ -1,0 +1,97 @@
+name: Build and Publish SDKJS
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  build-and-publish:
+    name: Build and Upload Artifacts
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    
+    steps:
+      - name: Checkout SDKJS
+        uses: actions/checkout@v4
+        with:
+          path: 'sdkjs'
+          fetch-depth: 1
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: |
+          cd sdkjs/build
+          npm install
+
+      - name: Build SDKJS (all components)
+        run: |
+          cd sdkjs/build
+          npx grunt
+
+      - name: Verify build outputs
+        run: |
+          echo "Checking build outputs..."
+          ls -la sdkjs/deploy/sdkjs/
+          ls -la sdkjs/deploy/sdkjs/word/ || echo "Word directory not found"
+          ls -la sdkjs/deploy/sdkjs/cell/ || echo "Cell directory not found"
+          ls -la sdkjs/deploy/sdkjs/slide/ || echo "Slide directory not found"
+          ls -la sdkjs/deploy/sdkjs/visio/ || echo "Visio directory not found"
+
+      - name: Package artifacts
+        run: |
+          cd sdkjs/deploy
+          tar -czf ../../sdkjs-build.tar.gz sdkjs/
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: sdkjs-build-${{ github.sha }}
+          path: sdkjs-build.tar.gz
+          retention-days: 30
+
+      - name: Prepare GitHub Pages content
+        run: |
+          mkdir -p gh-pages
+          cp -r sdkjs/deploy/sdkjs gh-pages/
+          
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: gh-pages
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+      - name: Generate build summary
+        run: |
+          echo "## SDKJS Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Branch**: master" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Build Time**: $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+          echo "- **Artifact Name**: sdkjs-build-${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **GitHub Pages URL**: ${{ steps.deployment.outputs.page_url }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Built Components" >> $GITHUB_STEP_SUMMARY
+          echo "- Word SDK (sdk-all.js, sdk-all-min.js)" >> $GITHUB_STEP_SUMMARY
+          echo "- Cell SDK (sdk-all.js, sdk-all-min.js)" >> $GITHUB_STEP_SUMMARY
+          echo "- Slide SDK (sdk-all.js, sdk-all-min.js)" >> $GITHUB_STEP_SUMMARY
+          echo "- Visio SDK (sdk-all.js, sdk-all-min.js)" >> $GITHUB_STEP_SUMMARY
+          echo "- Common files and PDF support" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Deployment" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Successfully deployed to GitHub Pages" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Build artifacts are located in deploy/sdkjs/ directory" >> $GITHUB_STEP_SUMMARY
